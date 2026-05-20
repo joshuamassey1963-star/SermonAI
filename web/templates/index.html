@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>William Marrion Branham Sermons AI Chat</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    :root {
+        --bg-color: #090e17;
+        --chat-bg: #111827;
+        --ai-bubble: #1e293b;
+        --user-grad: linear-gradient(135deg, #0ea5e9, #2563eb);
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --accent-red: #f43f5e;
+        --accent-green: #10b981;
+        --border-color: #334155;
+    }
+    
+    body { background: var(--bg-color); color: var(--text-main); font-family: -apple-system, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    .header { text-align: center; padding: 14px 10px; background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-color); z-index: 10; }
+    .header h2 { margin: 0; font-size: 18px; font-weight: 700; color: #f8fafc; }
+
+    .chat-box { flex-grow: 1; overflow-y: auto; padding: 20px 15px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+    
+    .empty-state { text-align: center; margin: auto; padding: 30px 20px; background: var(--chat-bg); border-radius: 16px; border: 1px dashed var(--border-color); max-width: 85%; }
+    .empty-state h3 { color: var(--accent-red); margin-top: 0; font-size: 18px; }
+    .empty-state p { color: var(--text-muted); font-size: 14px; margin-bottom: 0; }
+
+    .msg-wrapper { display: flex; flex-direction: column; width: 100%; }
+    .user-wrapper { align-items: flex-end; }
+    .ai-wrapper { align-items: flex-start; }
+
+    .message { padding: 14px 18px; border-radius: 18px; max-width: 85%; font-size: 15.5px; line-height: 1.6; word-wrap: break-word; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .user-msg { background: var(--user-grad); color: white; border-bottom-right-radius: 4px; font-weight: 500; }
+    .ai-msg { background: var(--ai-bubble); color: var(--text-main); border-bottom-left-radius: 4px; border: 1px solid var(--border-color); }
+    
+    .ai-msg p { color: #f8fafc; }
+    .ai-msg h1, .ai-msg h2 { color: #facc15 !important; font-size: 19px; margin: 18px 0 10px 0; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; font-weight: bold; }
+    .ai-msg h3, .ai-msg h4 { color: #f472b6 !important; font-size: 17px; margin: 15px 0 8px 0; font-weight: bold; }
+    .ai-msg h1 strong, .ai-msg h2 strong, .ai-msg h3 strong, .ai-msg h4 strong { color: inherit !important; } 
+    .ai-msg strong { color: #34d399; font-weight: bold; }
+    .ai-msg blockquote { border-left: 4px solid #818cf8 !important; margin: 12px 0; padding: 12px 15px; font-style: italic; color: #c7d2fe !important; background: rgba(129, 140, 248, 0.08); border-radius: 0 8px 8px 0; }
+    .ai-msg blockquote strong { color: #a5b4fc !important; }
+
+    .action-bar { display: flex; gap: 12px; margin-top: 12px; margin-bottom: 5px; padding-left: 2px; }
+    .action-btn { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.4); color: #f8fafc; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .action-btn svg { width: 15px; height: 15px; stroke: #38bdf8; }
+
+    .sources { margin-top: 15px; font-size: 13.5px; color: #cbd5e1; background: rgba(0,0,0,0.3); padding: 14px; border-radius: 8px; border-left: 4px solid #38bdf8; }
+
+    .controls-dock { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(15px); padding: 15px; border-top: 1px solid var(--border-color); z-index: 10; }
+    
+    .settings-row { display: flex; gap: 10px; margin-bottom: 12px; }
+    select { flex: 1; padding: 10px; background: var(--ai-bubble); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 10px; font-size: 14px; outline: none; }
+
+    .input-group { display: flex; gap: 8px; margin-bottom: 10px; }
+    textarea { flex-grow: 1; height: 24px; padding: 14px; border-radius: 12px; font-size: 16px; font-family: inherit; resize: none; color: white; outline: none; background: #0f1117;}
+    
+    .btn-submit { padding: 0 15px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+
+    .topic-box { border: 1px solid var(--accent-red); }
+    .btn-new { background: var(--accent-red); color: white; }
+    .follow-box { border: 1px solid var(--accent-green); }
+    .btn-follow { background: var(--accent-green); color: #000; }
+
+    .loading { display: none; text-align: center; color: #38bdf8; font-size: 13px; margin-top: 5px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header"><h2>William Marrion Branham Sermons AI Chat</h2></div>
+
+<div class="chat-box" id="chatBox">
+    {% if not history %}
+        <div class="empty-state">
+            <h3>Start a Fresh Search</h3>
+            <p>Use the <b>RED box</b> below to ask a new doctrinal question.</p>
+        </div>
+    {% endif %}
+    
+    {% for chat in history %}
+        <div class="msg-wrapper user-wrapper"><div class="message user-msg">{{ chat.user }}</div></div>
+        <div class="msg-wrapper ai-wrapper">
+            <div class="raw-ai" style="display:none;">{{ chat.ai }}</div>
+            <div class="message ai-msg parsed-ai"></div>
+            <div class="action-bar">
+                <button type="button" class="action-btn" onclick="copyText(this)"><span>Copy</span></button>
+            </div>
+        </div>
+    {% endfor %}
+
+    {% if sources %}
+        <div class="sources"><strong>📚 Evidence Scanned:</strong><br><br>
+            {% for source in sources %}• <span style="color:#f8fafc;">{{ source.title }}</span> <i>({{ source.code }})</i><br>{% endfor %}
+        </div>
+    {% endif %}
+    <div id="chatAnchor"></div>
+</div>
+
+<div class="controls-dock">
+    <div class="settings-row">
+        <select id="mainEngine"><option value="online" {% if engine == "online" %}selected{% endif %}>Online AI (DeepSeek)</option><option value="offline" {% if engine == "offline" %}selected{% endif %}>Offline RAG (Gemma)</option></select>
+        <select id="mainMode"><option value="short" {% if mode == "short" %}selected{% endif %}>Short (Summary)</option><option value="medium" {% if mode == "medium" %}selected{% endif %}>Medium (Detail)</option><option value="long" {% if mode == "long" %}selected{% endif %}>Long (Exhaustive)</option></select>
+    </div>
+
+    <form method="post" action="/search" class="input-group" onsubmit="return submitForm(this);">
+        <input type="hidden" name="reset_history" value="true">
+        <input type="hidden" name="engine" class="hidden-engine">
+        <input type="hidden" name="mode" class="hidden-mode">
+        <textarea name="query" class="topic-box" placeholder="New Topic (Resets Memory)..." required></textarea>
+        <button type="submit" class="btn-submit btn-new">Go</button>
+    </form>
+
+    {% if history %}
+    <form method="post" action="/search" class="input-group" onsubmit="return submitForm(this);">
+        <input type="hidden" name="reset_history" value="false">
+        <input type="hidden" name="engine" class="hidden-engine">
+        <input type="hidden" name="mode" class="hidden-mode">
+        <textarea name="query" class="follow-box" placeholder="Follow-up (Keeps Memory)..." required></textarea>
+        <button type="submit" class="btn-submit btn-follow">Reply</button>
+    </form>
+    {% endif %}
+    <div class="loading" id="loading">⚡ Processing Doctrinal Engine...</div>
+</div>
+
+<script>
+function submitForm(formElement) {
+    formElement.querySelector('.hidden-engine').value = document.getElementById('mainEngine').value;
+    formElement.querySelector('.hidden-mode').value = document.getElementById('mainMode').value;
+    document.getElementById('loading').style.display='block'; return true;
+}
+
+// SENIOR DEV FIX: Copy Rendered Text Only, No Markdown Symbols
+function copyText(btn) {
+    const textToCopy = btn.closest('.ai-wrapper').querySelector('.parsed-ai').innerText;
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        const span = btn.querySelector('span'); const originalText = span.innerText;
+        span.innerText = "Copied Plain Text!"; setTimeout(() => { span.innerText = originalText; }, 2000);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    var rawEls = document.querySelectorAll(".raw-ai");
+    var parsedEls = document.querySelectorAll(".parsed-ai");
+    rawEls.forEach(function(el, index) { parsedEls[index].innerHTML = marked.parse(el.textContent); });
+    setTimeout(() => { var anchor = document.getElementById("chatAnchor"); if(anchor) { anchor.scrollIntoView({ behavior: "smooth" }); } }, 100);
+});
+</script>
+</body>
+</html>
