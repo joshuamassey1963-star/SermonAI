@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Advanced Sermon Reader</title>
+<style>
+    :root[data-theme="dark"] { --bg: #090e17; --text: #f8fafc; --sidebar: #111827; --border: #334155; --accent: #38bdf8; --btn-bg: #1e293b; --box-index: #1e293b; --box-search: #0f172a; }
+    :root[data-theme="light"] { --bg: #ffffff; --text: #111827; --sidebar: #f3f4f6; --border: #e5e7eb; --accent: #2563eb; --btn-bg: #e5e7eb; --box-index: #ffffff; --box-search: #f8fafc; }
+    :root[data-theme="sepia"] { --bg: #f4ecd8; --text: #433422; --sidebar: #e6dfcc; --border: #d6ceb8; --accent: #b45309; --btn-bg: #d6ceb8; --box-index: #fdf6e3; --box-search: #eee8d5; }
+
+    /* BUG FIX: FIXED BODY PREVENTS SCROLL OVERFLOW ON MOBILE */
+    body { position: fixed; top: 0; left: 0; right: 0; bottom: 0; margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; transition: all 0.3s; }
+    
+    .toolbar { height: 55px; min-height: 55px; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; background: var(--sidebar); border-bottom: 2px solid var(--border); flex-shrink: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    
+    /* SLIDER TOGGLE CSS */
+    .nav-toggle { display: flex; align-items: center; gap: 8px; }
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; margin: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #1e293b; border: 2px solid #475569; border-radius: 30px; transition: .4s; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #94a3b8; border-radius: 50%; transition: .4s; }
+    .switch input:checked + .slider { border-color: var(--accent); }
+    .switch input:checked + .slider:before { transform: translateX(20px); background-color: var(--accent); }
+
+    .controls { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
+    .controls select, .controls button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); padding: 5px 8px; border-radius: 6px; font-size: 14px; outline: none; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+    
+    #fullscreen-btn { background: var(--accent); color: white; border: none; font-size: 16px; width: 32px; padding: 4px; }
+    .exit-fs { background: #ef4444 !important; }
+
+    .app-container { display: flex; flex-grow: 1; overflow: hidden; transition: all 0.3s; }
+    .sidebar { width: 320px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.3s ease; }
+    .sidebar.hidden { display: none; }
+
+    .search-container { padding: 12px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .index-dropdown { background: var(--box-index); color: var(--text); border: 1px solid var(--border); padding: 8px; border-radius: 6px; outline: none; font-size: 14px; font-weight: 500; }
+    .search-input { background: var(--box-search); color: var(--text); border: 1px dashed var(--accent); padding: 8px; border-radius: 6px; outline: none; font-size: 13px; }
+
+    .sermon-list { flex-grow: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
+    .sermon-item { padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .sermon-item:hover { background: var(--btn-bg); }
+    .sermon-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; line-height: 1.3; }
+    .sermon-meta { font-size: 11px; opacity: 0.7; }
+
+    .reader-pane { flex-grow: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; transition: all 0.3s; }
+    .content-wrapper { max-width: 850px; margin: 0 auto; padding-bottom: 150px; }
+    
+    .reader-header { margin-bottom: 20px; border-bottom: 2px solid var(--accent); padding-bottom: 15px; text-align: center; }
+    .reader-title { font-size: 24px; font-weight: bold; margin: 0 0 8px 0; line-height: 1.3; }
+    .reader-subtitle { font-size: 15px; color: var(--accent); font-weight: 600; margin-bottom: 5px; }
+    .reader-location { font-size: 15px; font-weight: bold; color: var(--text); opacity: 0.9; margin-bottom: 5px; }
+    
+    #sermon-text { font-size: 18px; line-height: 1.7; }
+    #sermon-text p { margin-bottom: 1.4em; text-align: justify; }
+
+    .sermon-footer { margin-top: 50px; padding-top: 20px; border-top: 1px dashed var(--border); text-align: center; font-style: italic; font-weight: bold; font-size: 16px; color: var(--accent); }
+
+    #floating-copy { display: none; position: absolute; background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); z-index: 100; font-size: 14px; }
+    
+    @media (max-width: 768px) {
+        .app-container { flex-direction: column; }
+        .sidebar { width: 100%; height: 35vh; border-right: none; border-bottom: 2px solid var(--accent); flex-shrink: 0;}
+        .reader-pane { padding: 15px; flex-grow: 1; }
+        .reader-title { font-size: 20px; }
+    }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+    <div class="nav-toggle">
+        <span style="font-size:20px; filter: grayscale(100%); opacity:0.5;" title="Chat">💬</span>
+        <label class="switch">
+            <input type="checkbox" checked onchange="setTimeout(()=>window.location.href='/', 150)">
+            <span class="slider"></span>
+        </label>
+        <span style="font-size:20px; color:var(--accent);" title="Reader">📖</span>
+    </div>
+
+    <div class="controls">
+        <button id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶</button>
+        <select id="theme-selector" onchange="changeTheme()">
+            <option value="dark">🌙 Dark</option>
+            <option value="light">☀️ Light</option>
+            <option value="sepia">📜 Sepia</option>
+        </select>
+        <button onclick="changeFontSize(-1)">A-</button>
+        <button onclick="changeFontSize(1)">A+</button>
+    </div>
+</div>
+
+<div class="app-container">
+    <div class="sidebar" id="sidebar">
+        <div class="search-container">
+            <select id="yearDropdown" class="index-dropdown" onchange="filterByYear(this.value)">
+                <option value="">Filter by Year (All)...</option>
+            </select>
+            <select id="dateDropdown" class="index-dropdown" onchange="loadFromDropdown(this)">
+                <option value="">Index by Date (Old to New)...</option>
+            </select>
+            <select id="titleDropdown" class="index-dropdown" onchange="loadFromDropdown(this)">
+                <option value="">Index by Title (A-Z)...</option>
+            </select>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search Title/Date..." onkeyup="filterSermons()">
+        </div>
+        <ul class="sermon-list" id="sermonList">
+            <li style="padding:15px; text-align:center;">Loading index...</li>
+        </ul>
+    </div>
+    
+    <div class="reader-pane" id="readerPane">
+        <div class="content-wrapper">
+            <div class="reader-header" id="readerHeader" style="display:none;">
+                <h1 class="reader-title" id="r-title"></h1>
+                <div class="reader-subtitle" id="r-meta"></div>
+                <div class="reader-location" id="r-location"></div>
+            </div>
+            <div id="sermon-text">
+                <p style="text-align:center; opacity:0.6; margin-top:50px;">Select a sermon from the index to start reading.</p>
+            </div>
+            <div id="sermon-footer" class="sermon-footer" style="display:none;">
+                By Reverend William Marrion Branham
+            </div>
+        </div>
+    </div>
+</div>
+
+<button id="floating-copy" onclick="copySelectedText()">📋 Copy Text</button>
+
+<script>
+    let allSermons = [];
+    let currentFilteredSermons = [];
+    let currentFontSize = 18;
+    let isFullscreen = false;
+
+    const savedTheme = localStorage.getItem('sermonTheme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('theme-selector').value = savedTheme;
+
+    function changeTheme() {
+        const theme = document.getElementById('theme-selector').value;
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('sermonTheme', theme);
+    }
+
+    function changeFontSize(step) {
+        currentFontSize += (step * 2);
+        if (currentFontSize < 12) currentFontSize = 12;
+        if (currentFontSize > 36) currentFontSize = 36;
+        document.getElementById('sermon-text').style.fontSize = currentFontSize + 'px';
+    }
+
+    function toggleFullscreen() {
+        isFullscreen = !isFullscreen;
+        const sidebar = document.getElementById('sidebar');
+        const btn = document.getElementById('fullscreen-btn');
+        if(isFullscreen) {
+            sidebar.classList.add('hidden');
+            btn.innerHTML = "✖";
+            btn.classList.add('exit-fs');
+        } else {
+            sidebar.classList.remove('hidden');
+            btn.innerHTML = "⛶";
+            btn.classList.remove('exit-fs');
+        }
+    }
+
+    function getCleanTitle(t) {
+        if(!t) return "Unknown Title";
+        let c = t.replace(/_/g, ' '); 
+        c = c.replace(/^(\d{2,4}[ \-_]\d{3,4}[A-Za-z]?)[ \-_]*/, ''); 
+        return c.trim();
+    }
+
+    function getYearFromCode(code) {
+        if(!code || code === "null") return "Unknown Year";
+        if(code === "An_Exposition_Of_The_Seven_Church_Ages") return "1965";
+        try {
+            let yy = parseInt(code.substring(0, 2));
+            if(!isNaN(yy)) return yy >= 47 && yy <= 99 ? (1900 + yy).toString() : (2000 + yy).toString();
+        } catch(e) {}
+        return "Unknown Year";
+    }
+
+    function parseBeautifulDate(code) {
+        if(code === "An_Exposition_Of_The_Seven_Church_Ages") return "December 4, 1965 (Publication)";
+        if(!code || code.length < 7 || code === "null") return "Date Unknown";
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        try {
+            let yy = parseInt(code.substring(0, 2));
+            let mm = parseInt(code.substring(3, 5));
+            let dd = parseInt(code.substring(5, 7));
+            if(isNaN(yy) || isNaN(mm) || isNaN(dd)) return "Date Unknown";
+            let year = yy >= 47 && yy <= 99 ? 1900 + yy : 2000 + yy;
+            if (mm >= 1 && mm <= 12) {
+                let d = new Date(year, mm - 1, dd);
+                return `${days[d.getDay()]}, ${months[mm-1]} ${dd}, ${year}`;
+            }
+        } catch(e) {}
+        return "Date Unknown"; 
+    }
+
+    function getNumericDate(code) {
+        if(code === "An_Exposition_Of_The_Seven_Church_Ages") return "1965-12-04";
+        if(!code || code.length < 7 || code === "null") return "0000-00-00";
+        try {
+            let yy = parseInt(code.substring(0, 2));
+            let mm = code.substring(3, 5);
+            let dd = code.substring(5, 7);
+            if(isNaN(yy)) return "0000-00-00";
+            let year = yy >= 47 && yy <= 99 ? 1900 + yy : 2000 + yy;
+            return `${year}-${mm}-${dd}`;
+        } catch(e) {}
+        return "0000-00-00";
+    }
+
+    async function loadIndex() {
+        try {
+            const res = await fetch('/api/sermon_list');
+            let rawData = await res.json();
+            
+            allSermons = rawData.map(s => {
+                let cleanTitle = getCleanTitle(s.title);
+                let year = s.year ? s.year.toString() : getYearFromCode(s.code);
+                let sortDate = s.code === "An_Exposition_Of_The_Seven_Church_Ages" ? "65_1204" : (s.code || "ZZZ");
+                return { ...s, cleanTitle, year, sortDate };
+            });
+
+            currentFilteredSermons = [...allSermons];
+
+            let uniqueYears = [...new Set(allSermons.map(s => s.year).filter(y => y !== "Unknown Year"))].sort();
+            const yDrop = document.getElementById('yearDropdown');
+            uniqueYears.forEach(y => {
+                let opt = document.createElement('option'); opt.value = y; opt.innerText = "Year: " + y;
+                yDrop.appendChild(opt);
+            });
+
+            populateDropdowns(allSermons);
+            renderList(allSermons);
+        } catch(e) {
+            document.getElementById('sermonList').innerHTML = '<li style="padding:15px; color:red;">Error loading sermons.</li>';
+        }
+    }
+
+    function populateDropdowns(listToRender) {
+        const dDrop = document.getElementById('dateDropdown');
+        const tDrop = document.getElementById('titleDropdown');
+        dDrop.innerHTML = '<option value="">Index by Date (Old to New)...</option>';
+        tDrop.innerHTML = '<option value="">Index by Title (A-Z)...</option>';
+
+        let sortedByDate = [...listToRender].sort((a,b) => a.sortDate.localeCompare(b.sortDate));
+        sortedByDate.forEach(s => {
+            if(s.sortDate !== "ZZZ" && s.sortDate !== "null") {
+                let opt = document.createElement('option');
+                opt.value = s.code; opt.innerText = getNumericDate(s.code) + " - " + s.cleanTitle;
+                dDrop.appendChild(opt);
+            }
+        });
+
+        let sortedByTitle = [...listToRender].sort((a,b) => a.cleanTitle.localeCompare(b.cleanTitle));
+        sortedByTitle.forEach(s => {
+            let opt = document.createElement('option');
+            opt.value = s.code; opt.innerText = s.cleanTitle;
+            tDrop.appendChild(opt);
+        });
+    }
+
+    function filterByYear(year) {
+        if(year === "") { currentFilteredSermons = [...allSermons]; } 
+        else { currentFilteredSermons = allSermons.filter(s => s.year === year); }
+        populateDropdowns(currentFilteredSermons);
+        renderList(currentFilteredSermons);
+    }
+
+    function loadFromDropdown(selectEl) {
+        if(selectEl.value) { loadSermon(selectEl.value); }
+    }
+
+    function filterSermons() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = currentFilteredSermons.filter(s => {
+            return s.cleanTitle.toLowerCase().includes(q) || s.year.includes(q) || (s.code||'').toLowerCase().includes(q);
+        });
+        renderList(filtered);
+    }
+
+    function renderList(list) {
+        const ul = document.getElementById('sermonList');
+        ul.innerHTML = '';
+        list.sort((a,b) => a.sortDate.localeCompare(b.sortDate)).forEach(s => {
+            const li = document.createElement('li');
+            li.className = 'sermon-item';
+            let displayCode = s.code === "An_Exposition_Of_The_Seven_Church_Ages" ? "Book" : s.code;
+            li.innerHTML = `<div class="sermon-title">${s.cleanTitle}</div><div class="sermon-meta">${s.year} • ${displayCode}</div>`;
+            li.onclick = () => loadSermon(s.code);
+            ul.appendChild(li);
+        });
+    }
+
+    async function loadSermon(code) {
+        if(!code || code === 'null') return;
+        document.getElementById('sermon-text').innerHTML = '<p style="text-align:center;">Loading...</p>';
+        document.getElementById('sermon-footer').style.display = 'none';
+        document.getElementById('r-location').innerText = ''; 
+        
+        try {
+            const res = await fetch('/api/sermon/' + code);
+            const data = await res.json();
+            
+            document.getElementById('readerHeader').style.display = 'block';
+            let cTitle = getCleanTitle(data.title);
+            if(code === "An_Exposition_Of_The_Seven_Church_Ages") cTitle = "An Exposition Of The Seven Church Ages";
+            
+            document.getElementById('r-title').innerText = cTitle;
+            document.getElementById('r-meta').innerText = parseBeautifulDate(data.code);
+            
+            let rawText = data.text || "";
+
+            // 1. EXTRACT LOCATION
+            let locationInfo = "";
+            let textChunks = rawText.split('\n').filter(p => p.trim().length > 0);
+            let lastFewChunks = textChunks.slice(-20).join(" "); 
+            let locMatch = lastFewChunks.match(/(?:delivered|preached).*?in\s+([A-Za-z\s,\.]+?(?:U\.?S\.?A\.?|Canada|Africa|Mexico))/i);
+            if (locMatch) { locationInfo = locMatch[1].trim(); } 
+            else {
+                let aggMatch = lastFewChunks.match(/([A-Z][a-z]+[,\s]+[A-Z][a-z]+[,\s]+U\.?S\.?A\.?)/);
+                if (aggMatch) locationInfo = aggMatch[1].trim();
+            }
+            if(locationInfo) {
+                locationInfo = locationInfo.replace(/Voice Of God.*/i, '').trim();
+                document.getElementById('r-location').innerText = "📍 " + locationInfo;
+            }
+
+            // 2. BACKTICK CLEANER (START ONLY - Keep this to remove initial title garbage)
+            let backtickStartIdx = rawText.indexOf('`');
+            if (backtickStartIdx !== -1 && backtickStartIdx < 300) {
+                let oneIdx = rawText.indexOf('1.');
+                if (oneIdx !== -1 && oneIdx < backtickStartIdx) {
+                    rawText = "1. " + rawText.substring(backtickStartIdx + 1).trim();
+                } else {
+                    rawText = rawText.substring(backtickStartIdx + 1).trim();
+                }
+            } else {
+                let cleanStartIdx = rawText.search(/(?:^|\n|\s)(?:1|E-1)[\.\-\s]+[A-Z]/);
+                if (cleanStartIdx !== -1 && cleanStartIdx < 2000) {
+                    rawText = rawText.substring(cleanStartIdx).trim();
+                }
+            }
+            rawText = rawText.replace(/^\s*(?:1|E-1)[\.\-\s]+/, "1. ");
+
+            // 3. SAFE END CLEANER (Reverted as requested to not cut off sermons)
+            const cleanupRegex = /(?:distributed by Voice Of God Recordings|Reprinted in 20\d{2}|©\d{4}\s*VGr?|ALL RIGHTS RESERVED|P[\.\s]*O[\.\s]*Box\s*950|www\s*\.\s*branham\s*\.\s*org)/i;
+            const match = rawText.match(cleanupRegex);
+            if(match) {
+                rawText = rawText.substring(0, match.index);
+            }
+
+            rawText = rawText.replace(/E-(\d+)/g, "$1.");
+
+            // FORMAT
+            const paragraphs = rawText.split('\n').filter(p => p.trim().length > 0);
+            const formattedHTML = paragraphs.map(p => `<p>${p}</p>`).join('');
+            
+            document.getElementById('sermon-text').innerHTML = formattedHTML;
+            document.getElementById('sermon-footer').style.display = 'block';
+            document.getElementById('readerPane').scrollTop = 0;
+            
+        } catch(e) {
+            document.getElementById('sermon-text').innerHTML = '<p style="color:red;">Failed to load sermon.</p>';
+        }
+    }
+
+    document.addEventListener('selectionchange', () => {
+        const selection = window.getSelection();
+        const btn = document.getElementById('floating-copy');
+        if (selection.toString().trim().length > 0) {
+            const range = selection.getRangeAt(0).getBoundingClientRect();
+            btn.style.display = 'block';
+            btn.style.top = (range.top + window.scrollY - 40) + 'px';
+            btn.style.left = (range.left + (range.width / 2) - 50) + 'px';
+        } else {
+            btn.style.display = 'none';
+        }
+    });
+
+    function copySelectedText() {
+        const text = window.getSelection().toString().trim();
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('floating-copy');
+            btn.innerText = "✅ Copied!";
+            setTimeout(() => { btn.innerText = "📋 Copy Text"; btn.style.display = 'none'; window.getSelection().removeAllRanges(); }, 1500);
+        });
+    }
+
+    loadIndex();
+</script>
+</body>
+</html>
