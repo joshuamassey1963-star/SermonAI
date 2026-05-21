@@ -1,7 +1,6 @@
 import os
 import requests
 from dotenv import load_dotenv
-
 from web.ai_engine import retrieve_sermon_evidence
 
 load_dotenv("/data/data/com.termux/files/home/SermonAI/.env", override=True)
@@ -11,7 +10,7 @@ MODEL_NAME = "deepseek/deepseek-chat"
 
 online_chat_history = []
 
-def ask_online_ai(prompt, max_tokens=700, temperature=0.1):
+def ask_online_ai(prompt, max_tokens=1500, temperature=0.1):
     try:
         response = requests.post(
             OPENROUTER_URL,
@@ -20,84 +19,38 @@ def ask_online_ai(prompt, max_tokens=700, temperature=0.1):
             timeout=200
         )
         data = response.json()
-        if "choices" not in data: return {"success": False, "answer": "API Error: No response or connection timeout."}
-        
-        content = data["choices"][0]["message"]["content"]
-        if not content or content.strip() == "": return {"success": False, "answer": "Error: Empty response from AI."}
-        return {"success": True, "answer": content}
+        if "choices" not in data: return {"success": False, "answer": "API Error."}
+        return {"success": True, "answer": data["choices"][0]["message"]["content"]}
     except Exception as e:
-        return {"success": False, "answer": f"Request Failed/Timeout: {str(e)}"}
-
-def generate_search_query(query, history):
-    if not history:
-        prompt = f"Extract core theological search keywords from this query. Output ONLY English keywords.\nQuery: {query}"
-    else:
-        hist_str = "\n".join([f"User: {c['user']}" for c in history[-2:]])
-        prompt = f"Context:\n{hist_str}\n\nFollow-up: {query}\n\nRewrite follow-up into standalone English keywords combining context. Output ONLY keywords."
-    
-    res = ask_online_ai(prompt, max_tokens=50, temperature=0.0)
-    if res["success"]: return res["answer"].replace('"', '').strip()
-    return query
+        return {"success": False, "answer": str(e)}
 
 def online_search(query, mode="medium"):
     global online_chat_history
+    retrieval = retrieve_sermon_evidence(query=query, mode=mode)
     
-    english_query = generate_search_query(query, online_chat_history)
+    prompt = f"""You are an advanced researcher of William Branham's sermons.
     
-    # SENIOR DEV FIX: PREVENTING KEYWORD LOSS
-    # Combining the raw user query with AI keywords so exact words (like "eggs") are NEVER skipped.
-    combined_search_vector = f"{query} {english_query}"
-    print(f"\n[AI] Search Vector: {combined_search_vector}\n")
+    CRITICAL INSTRUCTIONS:
+    1. EXACT MATCHES: If the user asks for specific quotes, words, or sentences, you MUST provide them verbatim from the EVIDENCE below.
+    2. TIMELINE TRACKING: Synthesize teachings chronologically. If a doctrine evolved, explicitly highlight the transition and the final mature position.
+    3. NO HALLUCINATION: Everything must be grounded in the provided Evidence blocks.
+    4. STRUCTURE: Use headings for sections, > for quotes, and bold for key theological concepts.
 
-    retrieval = retrieve_sermon_evidence(query=combined_search_vector, mode=mode)
-    evidence = retrieval["evidence"]
-    max_tokens = retrieval["config"]["tokens"]
-
-    history_context = ""
-    if online_chat_history:
-        history_context = "PAST CONVERSATION:\n"
-        for chat in online_chat_history: 
-            history_context += f"User: {chat['user']}\nAI: {chat['ai'][:200]}...\n\n"
-
-    # Dynamic length instruction
-    if mode == "long":
-        length_instruction = "Provide a HIGHLY DETAILED and EXHAUSTIVE response. Quote extensively and break down every aspect of the topic."
-    elif mode == "short":
-        length_instruction = "Provide a brief, concise summary."
-    else:
-        length_instruction = "Provide a balanced and moderately detailed explanation."
-
-    prompt = f"""You are an advanced theological research assistant for William Branham's teachings.
-
-CRITICAL DOCTRINAL REASONING RULES:
-1. THE TIMELINE: The evidence below is strictly ordered chronologically (oldest to newest).
-2. DOCTRINAL EVOLUTION: Brother Branham's teachings progressed and refined over time. Explain this progression clearly.
-3. WARNINGS vs. SOLUTIONS (CRITICAL): If he mentions a prophecy, warning, or danger (e.g., diseases, poisoned food, not eating eggs, valleys) but ALSO provides a Biblical solution or action for believers (e.g., sanctifying it by prayer, faith, and thanksgiving), YOU MUST EXPLAIN BOTH. 
-4. MATURE POSITION: Treat his chronologically latest explicit statement on the specific topic as his mature, final doctrinal position.
-5. FORMATTING: Use `## ` or `### ` for Headings. Use `>` for Quotes. Use `**` for Highlights. 
-6. RESPONSE LENGTH: {length_instruction}
-7. NO HALLUCINATION. Base everything strictly on the evidence below.
-
-{history_context}
-
-CURRENT QUESTION:
-{query}
-
-SERMON EVIDENCE:
-{evidence}
-
-ANSWER:"""
-
-    result = ask_online_ai(prompt, max_tokens)
+    EVIDENCE:
+    {retrieval['evidence']}
     
-    final_answer_text = result["answer"]
-    if not result["success"]: 
-        final_answer_text = f"⚠️ **Connection/API Error:**\n{result['answer']}\n\n*The server took too long or failed to respond. Your chat history is safe. Please click 'Follow Up' to try asking again.*"
+    USER QUERY: {query}
+    
+    RESEARCH RESPONSE:"""
 
-    online_chat_history.append({"user": query, "ai": final_answer_text})
+    result = ask_online_ai(prompt, max_tokens=retrieval["config"]["tokens"] * 2)
+    answer = result["answer"] if result["success"] else "Error communicating with Online Engine."
+    
+    online_chat_history.append({"user": query, "ai": answer})
     if len(online_chat_history) > 5: online_chat_history.pop(0)
-
-    return {"answer": final_answer_text, "sources": retrieval["sources"]}
+    
+    return {"answer": answer, "sources": retrieval["sources"]}
 
 def hybrid_search(query, mode="medium"):
-    return {"answer": "Hybrid temporarily disabled.", "sources": []}
+    # Future expansion ke liye placeholder
+    return {"answer": "Hybrid search is currently under maintenance.", "sources": []}
