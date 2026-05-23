@@ -9,12 +9,10 @@
     :root[data-theme="light"] { --bg: #ffffff; --text: #111827; --sidebar: #f3f4f6; --border: #e5e7eb; --accent: #2563eb; --btn-bg: #e5e7eb; --box-index: #ffffff; --box-search: #f8fafc; }
     :root[data-theme="sepia"] { --bg: #f4ecd8; --text: #433422; --sidebar: #e6dfcc; --border: #d6ceb8; --accent: #b45309; --btn-bg: #d6ceb8; --box-index: #fdf6e3; --box-search: #eee8d5; }
 
-    /* BUG FIX: FIXED BODY PREVENTS SCROLL OVERFLOW ON MOBILE */
     body { position: fixed; top: 0; left: 0; right: 0; bottom: 0; margin: 0; font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; transition: all 0.3s; }
     
     .toolbar { height: 55px; min-height: 55px; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; background: var(--sidebar); border-bottom: 2px solid var(--border); flex-shrink: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     
-    /* SLIDER TOGGLE CSS */
     .nav-toggle { display: flex; align-items: center; gap: 8px; }
     .switch { position: relative; display: inline-block; width: 46px; height: 26px; margin: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -51,8 +49,9 @@
     .reader-subtitle { font-size: 15px; color: var(--accent); font-weight: 600; margin-bottom: 5px; }
     .reader-location { font-size: 15px; font-weight: bold; color: var(--text); opacity: 0.9; margin-bottom: 5px; }
     
-    #sermon-text { font-size: 18px; line-height: 1.7; }
+    #sermon-text { font-size: 18px; line-height: 1.8; }
     #sermon-text p { margin-bottom: 1.4em; text-align: justify; }
+    .p-num { font-weight: 800; font-size: 1.15em; color: var(--accent); margin-right: 5px; display: inline-block; }
 
     .sermon-footer { margin-top: 50px; padding-top: 20px; border-top: 1px dashed var(--border); text-align: center; font-style: italic; font-weight: bold; font-size: 16px; color: var(--accent); }
 
@@ -128,6 +127,7 @@
 
 <button id="floating-copy" onclick="copySelectedText()">📋 Copy Text</button>
 
+<script src="/static/js/cleaner.js"></script>
 <script>
     let allSermons = [];
     let currentFilteredSermons = [];
@@ -318,7 +318,7 @@
             
             let rawText = data.text || "";
 
-            // 1. EXTRACT LOCATION
+            // LOCATION EXTRACTOR
             let locationInfo = "";
             let textChunks = rawText.split('\n').filter(p => p.trim().length > 0);
             let lastFewChunks = textChunks.slice(-20).join(" "); 
@@ -333,33 +333,14 @@
                 document.getElementById('r-location').innerText = "📍 " + locationInfo;
             }
 
-            // 2. BACKTICK CLEANER (START ONLY - Keep this to remove initial title garbage)
-            let backtickStartIdx = rawText.indexOf('`');
-            if (backtickStartIdx !== -1 && backtickStartIdx < 300) {
-                let oneIdx = rawText.indexOf('1.');
-                if (oneIdx !== -1 && oneIdx < backtickStartIdx) {
-                    rawText = "1. " + rawText.substring(backtickStartIdx + 1).trim();
-                } else {
-                    rawText = rawText.substring(backtickStartIdx + 1).trim();
-                }
-            } else {
-                let cleanStartIdx = rawText.search(/(?:^|\n|\s)(?:1|E-1)[\.\-\s]+[A-Z]/);
-                if (cleanStartIdx !== -1 && cleanStartIdx < 2000) {
-                    rawText = rawText.substring(cleanStartIdx).trim();
-                }
-            }
-            rawText = rawText.replace(/^\s*(?:1|E-1)[\.\-\s]+/, "1. ");
+            rawText = applyCleaningRules(rawText);
 
-            // 3. SAFE END CLEANER (Reverted as requested to not cut off sermons)
-            const cleanupRegex = /(?:distributed by Voice Of God Recordings|Reprinted in 20\d{2}|©\d{4}\s*VGr?|ALL RIGHTS RESERVED|P[\.\s]*O[\.\s]*Box\s*950|www\s*\.\s*branham\s*\.\s*org)/i;
-            const match = rawText.match(cleanupRegex);
-            if(match) {
-                rawText = rawText.substring(0, match.index);
-            }
-
+                        // ==========================================
+            // 🔴 FORMATTING 🔴
+            // ==========================================
             rawText = rawText.replace(/E-(\d+)/g, "$1.");
+            rawText = rawText.replace(/(^|\n)[ \t]*(\d+\.)[ \t]+/gm, '\n<span class="p-num">$2</span> ');
 
-            // FORMAT
             const paragraphs = rawText.split('\n').filter(p => p.trim().length > 0);
             const formattedHTML = paragraphs.map(p => `<p>${p}</p>`).join('');
             
